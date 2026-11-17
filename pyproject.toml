@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "coursework-chess-analytics"
+version = "1.0.0"
+description = "CLI and desktop analysis of Lichess game metadata"
+requires-python = ">=3.10"
+dependencies = [
+    "chess>=1.11.2,<2",
+    "matplotlib>=3.9,<4",
+    "backports.zstd>=1.0; python_version < '3.14'",
+]
+
+[project.scripts]
+cw2 = "chess_analytics.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["chess_analytics*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = ["gui: requires a desktop display and tkinter"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
