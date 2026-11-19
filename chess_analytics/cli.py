@@ -5,17 +5,14 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from .models import DataError, TimeControl
+from .models import DataError, TimeControl, parse_rating_bound
 
 
 def rating_value(value: str) -> int:
     try:
-        result = int(value)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("rating must be a whole number") from exc
-    if not 0 <= result <= 2**31 - 1:
-        raise argparse.ArgumentTypeError("rating must be between 0 and 2147483647")
-    return result
+        return parse_rating_bound(value)
+    except DataError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -122,6 +122,22 @@ def test_duplicate_headers_rejected(tmp_path):
         preprocess(source, tmp_path / "out.db")
 
 
+def test_duplicate_headers_skip_only_the_affected_game(tmp_path):
+    source = tmp_path / "mixed.pgn.zst"
+    content = (
+        pgn_game() + '[White "Duplicate"]\n' + pgn_game(White="Carol") + pgn_game(White="Diana")
+    )
+    source.write_bytes(zstd.compress(content.encode("utf-8")))
+
+    output = tmp_path / "out.db"
+    summary = preprocess(source, output)
+
+    assert (summary.seen, summary.saved, summary.invalid) == (3, 2, 1)
+    assert summary.reasons == {"Duplicate PGN header: White.": 1}
+    with DataStore(output) as store:
+        assert store.search_players() == ["Alice", "Bob", "Diana"]
+
+
 def test_input_output_safety(make_dataset, tmp_path):
     path, _, source = make_dataset([{}])
     original = path.read_bytes()
@@ -136,9 +152,13 @@ def test_input_output_safety(make_dataset, tmp_path):
 
 
 def test_read_only_store_and_search(make_dataset):
-    path, _, _ = make_dataset([{"White": "A_One"}, {"White": "AXOne"}])
+    path, _, _ = make_dataset(
+        [{"White": "A_One", "Black": "B_One"}, {"White": "AXOne", "Black": "B_One"}]
+    )
     with DataStore(path) as store:
-        assert store.search_players("_") == ["A_One"]
+        assert store.search_players("_") == ["A_One", "B_One"]
+        assert store.search_players("_", black_only=True) == ["B_One"]
+        assert store.search_players("A_One", black_only=True) == []
         assert store.search_players("a_one") == ["A_One"]
         with pytest.raises(sqlite3.OperationalError):
             store.connection.execute("DELETE FROM games")

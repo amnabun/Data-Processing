@@ -93,13 +93,20 @@ class DataStore:
             is not None
         )
 
-    def search_players(self, query: str = "", limit: int = 200) -> list[str]:
+    def search_players(
+        self, query: str = "", limit: int = 200, *, black_only: bool = False
+    ) -> list[str]:
         # LIKE wildcards are escaped: a typed '%' searches for a literal percent sign.
         pattern = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-        rows = self.connection.execute(
-            "SELECT white AS player FROM games WHERE white LIKE ? ESCAPE '\\' "
-            "UNION SELECT black AS player FROM games WHERE black LIKE ? ESCAPE '\\' "
-            "ORDER BY player LIMIT ?",
-            (pattern, pattern, limit),
-        )
+        black_query = "SELECT black AS player FROM games WHERE black LIKE ? ESCAPE '\\'"
+        if black_only:
+            query = f"SELECT DISTINCT player FROM ({black_query})"
+            params = (pattern, limit)
+        else:
+            query = (
+                "SELECT white AS player FROM games WHERE white LIKE ? ESCAPE '\\' UNION "
+                + black_query
+            )
+            params = (pattern, pattern, limit)
+        rows = self.connection.execute(query + " ORDER BY player LIMIT ?", params)
         return [row[0] for row in rows]

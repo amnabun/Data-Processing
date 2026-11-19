@@ -1,6 +1,7 @@
 """Tkinter interface; worker threads never read or update Tk widgets."""
 
 import queue
+import re
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -8,7 +9,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from .analysis import most_improved, popular_openings
 from .charts import draw_openings
-from .models import DataError, TimeControl
+from .models import DataError, TimeControl, parse_rating_bound
 from .preprocess import preprocess
 from .similarity import METRICS, similar_players
 from .storage import DataStore
@@ -123,11 +124,7 @@ class ChessApp:
             side="left", padx=8
         )
         validate = (
-            self.root.register(
-                lambda value: (
-                    value == "" or (value.isascii() and value.isdecimal() and len(value) <= 10)
-                )
-            ),
+            self.root.register(lambda value: re.fullmatch(r"[+-]?[0-9]*", value) is not None),
             "%P",
         )
         for label, variable in (("Min rating", self.min_rating), ("Max rating", self.max_rating)):
@@ -181,9 +178,11 @@ class ChessApp:
         self.player_combo = self._combo(row, self.player, [], 30)
         self.player_combo.pack(side="left")
         self.metric_name = tk.StringVar(value="Time formats")
-        self._combo(row, self.metric_name, ["Time formats", "Black openings"], 18).pack(
-            side="left", padx=10
+        self.metric_combo = self._combo(
+            row, self.metric_name, ["Time formats", "Black openings"], 18
         )
+        self.metric_combo.pack(side="left", padx=10)
+        self.metric_combo.bind("<<ComboboxSelected>>", self._metric_changed)
         self._button(row, "Find similar players", self.find_similar).pack(side="left")
         ttk.Label(
             frame,
@@ -284,10 +283,11 @@ class ChessApp:
             filetypes=[("SQLite dataset", "*.sqlite *.db"), ("All files", "*")],
         )
         if path:
+            black_only = self._black_openings_selected()
 
             def work():
                 with DataStore(path) as store:
-                    return store.game_count(), store.search_players()
+                    return store.game_count(), store.search_players(black_only=black_only)
 
             self._start(
                 "Checking dataset...", work, lambda result: self._dataset_loaded(path, result)
@@ -333,6 +333,7 @@ class ChessApp:
             parent=self.root,
         ):
             return
+        black_only = self._black_openings_selected()
 
         def work():
             summary = preprocess(
@@ -342,7 +343,7 @@ class ChessApp:
                 progress=lambda count: self.events.put(("progress", count, None)),
             )
             with DataStore(output) as store:
-                return summary, store.search_players()
+                return summary, store.search_players(black_only=black_only)
 
         def done(result):
             summary, players = result
@@ -357,8 +358,8 @@ class ChessApp:
 
     def plot_popularity(self):
         category = None if self.pop_control.get() == "All" else self.pop_control.get()
-        lower = int(self.min_rating.get()) if self.min_rating.get() else None
-        upper = int(self.max_rating.get()) if self.max_rating.get() else None
+        lower = parse_rating_bound(self.min_rating.get()) if self.min_rating.get() else None
+        upper = parse_rating_bound(self.max_rating.get()) if self.max_rating.get() else None
         subtitle = f"{category or 'All time controls'} | Rating: {lower if lower is not None else 'unbounded'} to {upper if upper is not None else 'unbounded'}"
 
         def done(result):
@@ -415,22 +416,39 @@ class ChessApp:
             done,
         )
 
-    def _set_players(self, players):
-        self.player_combo.configure(values=players)
-        self.player.set(players[0] if players else "")
+    def _black_openings_selected(self) -> bool:
+        return self.metric_name.get() == "Black openings"
 
-    def search_players(self):
+    def _metric_changed(self, _event):
+        self._set_players([])
+        self._fill_table(self.similarity_table, [])
+        if self.dataset.get():
+            self._guard(lambda: self.search_players(choose_first=False))
+
+    def _set_players(self, players, *, choose_first=True):
+        self.player_combo.configure(values=players)
+        self.player.set(players[0] if players and choose_first else "")
+
+    def search_players(self, *, choose_first=True):
         query = self.player_query.get().strip()
+        black_only = self._black_openings_selected()
 
         def done(players):
-            self._set_players(players)
-            self.status.set(
-                f"Found {len(players)} names (maximum 200). Select a player to compare."
-            )
+            self._set_players(players, choose_first=choose_first)
+            if players:
+                self.status.set(
+                    f"Found {len(players)} names (maximum 200). Select a player to compare."
+                )
+            else:
+                self.status.set(
+                    "No matching players with games as Black."
+                    if black_only
+                    else "No matching players."
+                )
 
         self._start(
             "Searching player names...",
-            self._with_data(lambda store: store.search_players(query)),
+            self._with_data(lambda store: store.search_players(query, black_only=black_only)),
             done,
         )
 
@@ -438,9 +456,7 @@ class ChessApp:
         player = self.player.get()
         if not player:
             raise DataError("Find and select a player from this dataset first.")
-        metric = METRICS[
-            "time-formats" if self.metric_name.get() == "Time formats" else "black-openings"
-        ]
+        metric = METRICS["black-openings" if self._black_openings_selected() else "time-formats"]
 
         def done(rows):
             self._fill_table(

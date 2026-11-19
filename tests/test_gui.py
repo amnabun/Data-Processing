@@ -41,8 +41,21 @@ def test_multiple_tasks_and_error_recovery(make_dataset, monkeypatch, tmp_path):
         app.find_improved()
         finish(root, app)
         assert len(app.improvement_table.get_children()) == 4
+        app.player.set("Alice")
+        app.metric_combo.current(1)
+        app.metric_combo.event_generate("<<ComboboxSelected>>")
+        finish(root, app)
+        assert set(app.player_combo.cget("values")) == {"Bob", "Diana"}
+        assert not app.player.get()
+        app.player_query.set("alice")
+        app.search_players()
+        finish(root, app)
+        assert not app.player_combo.cget("values")
+        assert "No matching players" in app.status.get()
+        app.player_query.set("")
+        app.search_players()
+        finish(root, app)
         app.player.set("Bob")
-        app.metric_name.set("Black openings")
         app.find_similar()
         finish(root, app)
         assert len(app.similarity_table.get_children()) == 1
@@ -51,7 +64,7 @@ def test_multiple_tasks_and_error_recovery(make_dataset, monkeypatch, tmp_path):
         app.plot_popularity()
         finish(root, app)
         assert "Minimum" in errors[-1][1]
-        app.min_rating.set("")
+        app.min_rating.set("-1")
         app.max_rating.set("")
         app.plot_popularity()
         finish(root, app)
@@ -60,6 +73,10 @@ def test_multiple_tasks_and_error_recovery(make_dataset, monkeypatch, tmp_path):
         finish(root, app)
         assert app.chart_canvas is not None
         app.player_query.set("car")
+        app.metric_combo.current(0)
+        app.metric_combo.event_generate("<<ComboboxSelected>>")
+        finish(root, app)
+        assert tuple(app.player_combo.cget("values")) == ("Carol",)
         app.search_players()
         finish(root, app)
         assert app.player.get() == "Carol"

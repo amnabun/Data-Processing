@@ -11,6 +11,13 @@ class DataError(ValueError):
     """An input or data error that can be shown directly to the user."""
 
 
+def parse_rating_bound(value: str) -> int:
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise DataError("Rating bounds must be whole numbers.") from exc
+
+
 class TimeControl(str, Enum):
     BULLET = "bullet"
     BLITZ = "blitz"

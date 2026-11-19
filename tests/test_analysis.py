@@ -34,6 +34,11 @@ def test_filters_are_inclusive_and_preserve_half_ratings(make_dataset):
         assert popular_openings(store, "blitz", 1500, 1500)[0] == 1
         assert popular_openings(store, min_rating=1501)[0] == 1
         assert popular_openings(store, max_rating=1500)[0] == 2
+        assert popular_openings(store, min_rating=-1)[0] == 4
+        assert popular_openings(store, max_rating=-1) == (0, [])
+        assert popular_openings(store, min_rating=-(10**30), max_rating=10**30)[0] == 4
+        assert popular_openings(store, min_rating=10**30) == (0, [])
+        assert popular_openings(store, max_rating=-(10**30)) == (0, [])
         assert popular_openings(store, "rapid") == (0, [])
         with pytest.raises(DataError):
             popular_openings(store, min_rating=2000, max_rating=1000)

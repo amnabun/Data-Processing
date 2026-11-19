@@ -2,7 +2,7 @@
 
 from textwrap import fill
 
-from .models import OpeningPopularity
+from .models import DataError, OpeningPopularity
 
 
 def draw_openings(figure, rows: list[OpeningPopularity], total: int, subtitle: str = "") -> None:
@@ -32,12 +32,23 @@ def draw_openings(figure, rows: list[OpeningPopularity], total: int, subtitle: s
 
 def show_openings(rows, total: int, subtitle: str, output: str | None = None) -> None:
     import matplotlib
+    from matplotlib.backends import backend_registry
 
     if output:
         matplotlib.use("Agg")
     from matplotlib import pyplot as plt
 
-    figure = plt.figure(figsize=(max(10, len(rows) * 0.45), 7))
+    display_error = "Cannot open a chart window. Use --save-chart=FILE.png to save the chart."
+    try:
+        if not output:
+            _, gui = backend_registry.resolve_backend(matplotlib.get_backend())
+            if gui is None:
+                raise DataError(display_error)
+        figure = plt.figure(figsize=(max(10, len(rows) * 0.45), 7))
+    except ImportError as exc:
+        if not output:
+            raise DataError(display_error) from exc
+        raise
     try:
         draw_openings(figure, rows, total, subtitle)
         if output:

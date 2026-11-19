@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -17,7 +18,6 @@ from chess_analytics.cli import main
         ["--raw-data=x"],
         ["--raw-data=x", "--outfile=y", "--datafile=z"],
         ["--popular-openings", "--datafile=x", "--min-rating=abc"],
-        ["--popular-openings", "--datafile=x", "--min-rating=-1"],
         ["--popular-openings", "--datafile=x", "--min-rating=2000", "--max-rating=1000"],
         ["--players-similar-to=Alice", "--datafile=x"],
         ["--players-similar-to=Alice", "--datafile=x", "--time-formats", "--black-openings"],
@@ -42,7 +42,12 @@ def test_cli_end_to_end(make_dataset, tmp_path):
         [f"--datafile={path}", "--top10", "--time-control=blitz"],
         [f"--datafile={path}", "--players-similar-to=Alice", "--time-formats"],
         [f"--datafile={path}", "--players-similar-to=Bob", "--black-openings"],
-        [f"--datafile={path}", "--popular-openings", f"--save-chart={tmp_path / 'chart.png'}"],
+        [
+            f"--datafile={path}",
+            "--popular-openings",
+            "--min-rating=-1",
+            f"--save-chart={tmp_path / 'chart.png'}",
+        ],
     ]
     for args in commands:
         result = subprocess.run(
@@ -51,6 +56,22 @@ def test_cli_end_to_end(make_dataset, tmp_path):
         assert result.returncode == 0, result.stderr
         assert "Traceback" not in result.stderr
     assert (tmp_path / "chart.png").read_bytes().startswith(b"\x89PNG")
+
+
+def test_chart_without_display_suggests_png_export(make_dataset):
+    path, _, _ = make_dataset([{}])
+    entry = Path(__file__).resolve().parents[1] / "cw2.py"
+    result = subprocess.run(
+        [sys.executable, str(entry), f"--datafile={path}", "--popular-openings"],
+        env={**os.environ, "MPLBACKEND": "Agg"},
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 1
+    assert "Cannot open a chart window" in result.stderr
+    assert "--save-chart" in result.stderr
+    assert "Traceback" not in result.stderr
 
 
 def test_errors_do_not_show_traceback(tmp_path, capsys):

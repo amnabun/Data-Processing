@@ -1,5 +1,7 @@
 """Opening frequencies and chronological rating improvement."""
 
+from math import inf
+
 from .models import DataError, OpeningPopularity, PlayerImprovement, TimeControl
 from .storage import APPEARANCES, DataStore
 
@@ -21,16 +23,20 @@ def popular_openings(
         clauses.append("time_control = ?")
         values.append(time_control)
     for bound in (min_rating, max_rating):
-        if bound is not None and (type(bound) is not int or not 0 <= bound <= 2**31 - 1):
-            raise DataError("Rating bounds must be integers between 0 and 2147483647.")
+        if bound is not None and type(bound) is not int:
+            raise DataError("Rating bounds must be integers.")
     if min_rating is not None and max_rating is not None and min_rating > max_rating:
         raise DataError("Minimum rating cannot be greater than maximum rating.")
-    if min_rating is not None:
-        clauses.append("game_rating >= ?")
-        values.append(min_rating)
-    if max_rating is not None:
-        clauses.append("game_rating <= ?")
-        values.append(max_rating)
+    for operator, bound in ((">=", min_rating), ("<=", max_rating)):
+        if bound is None:
+            continue
+        clauses.append(f"game_rating {operator} ?")
+        # A bound outside SQLite's integer range is beyond any imported rating.
+        if bound < -(2**63):
+            bound = -inf
+        elif bound >= 2**63:
+            bound = inf
+        values.append(bound)
     where = " WHERE " + " AND ".join(clauses) if clauses else ""
     counts = list(
         store.connection.execute(

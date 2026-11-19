@@ -42,12 +42,18 @@ class ImportSummary:
 
 
 class UniqueHeaders(chess.pgn.HeadersBuilder):
-    """Reject ambiguous duplicate tags instead of silently keeping the last value."""
+    """Remember a duplicate while the parser finishes consuming the game."""
+
+    def __init__(self):
+        super().__init__()
+        self.duplicate_tag: str | None = None
 
     def visit_header(self, tagname: str, tagvalue: str) -> None:
         if tagname in self.headers:
-            raise DataError(f"Duplicate PGN header: {tagname}.")
-        super().visit_header(tagname, tagvalue)
+            if self.duplicate_tag is None:
+                self.duplicate_tag = tagname
+        else:
+            super().visit_header(tagname, tagvalue)
 
 
 def preprocess(
@@ -91,9 +97,15 @@ def preprocess(
         opener = zstd.open if compressed else open
         batch = []
         with opener(source, "rt", encoding="utf-8-sig") as stream:
-            while (headers := chess.pgn.read_game(stream, Visitor=UniqueHeaders)) is not None:
+            while True:
+                visitor = UniqueHeaders()
+                headers = chess.pgn.read_game(stream, Visitor=lambda: visitor)
+                if headers is None:
+                    break
                 summary.seen += 1
                 try:
+                    if visitor.duplicate_tag is not None:
+                        raise DataError(f"Duplicate PGN header: {visitor.duplicate_tag}.")
                     game = Game.from_headers(headers)
                 except DataError as exc:
                     summary.invalid += 1
