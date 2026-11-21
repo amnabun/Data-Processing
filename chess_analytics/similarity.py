@@ -1,4 +1,4 @@
-"""Pluggable similarity metrics and one shared ranking routine."""
+"""Compare players by their time formats or favourite openings as Black."""
 
 from dataclasses import dataclass
 from heapq import nsmallest
@@ -10,7 +10,7 @@ from .storage import APPEARANCES, DataStore
 
 
 class SimilarityMetric(Protocol):
-    """Implement these three methods to add a metric without changing the sorter."""
+    """Implement these methods to use a new metric with the shared ranking function."""
 
     def profiles(self, store: DataStore) -> dict[str, Any]: ...
 
@@ -46,8 +46,7 @@ class BlackOpeningProfile:
 
 class BlackOpeningMetric:
     def profiles(self, store: DataStore) -> dict[str, BlackOpeningProfile]:
-        # A tied favourite is resolved alphabetically, consistently for every player.
-        # White games do not contribute to either the count or the denominator.
+        # Count only games played as Black. Break ties between openings alphabetically.
         rows = store.connection.execute("""
             WITH counts AS (
                 SELECT black AS player, opening, count(*) AS games
@@ -85,7 +84,10 @@ def similar_players(
     metric: SimilarityMetric,
     limit: int = 10,
 ) -> list[SimilarPlayer]:
-    """Rank using the supplied metric; exclude the reference player and break ties by name."""
+    """Return the closest matches using the chosen metric.
+
+    Skip the selected player and break ties in distance by player name.
+    """
     if not store.has_player(player):
         raise DataError(
             f"Player '{player}' does not appear in this dataset. Names are case-sensitive."

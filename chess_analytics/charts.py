@@ -1,4 +1,4 @@
-"""A shared chart renderer for the command line and embedded GUI canvas."""
+"""Draw opening charts for the command line and desktop app."""
 
 from textwrap import fill
 

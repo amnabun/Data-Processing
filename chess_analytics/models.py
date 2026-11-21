@@ -25,7 +25,7 @@ class TimeControl(str, Enum):
 
 
 def classify_time_control(value: str) -> TimeControl | None:
-    """Return the coursework category, or None for an excluded time control."""
+    """Return bullet, blitz, rapid, or None for a time control we skip."""
     if value == "-":  # Correspondence games have no clock.
         return None
     if not re.fullmatch(r"[0-9]+\+[0-9]+", value):

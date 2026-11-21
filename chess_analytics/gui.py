@@ -1,4 +1,4 @@
-"""Tkinter interface; worker threads never read or update Tk widgets."""
+"""Tkinter interface. Only the main thread reads or updates widgets."""
 
 import queue
 import re
@@ -68,8 +68,7 @@ class ChessApp:
             side="left", padx=(10, 0), fill="x", expand=True
         )
 
-        # Reserve the footer before the expanding notebook so a large chart's
-        # requested size cannot push progress and error messages off the window.
+        # Pack the footer before the tabs so a large chart can't hide the progress bar or messages.
         footer = ttk.Frame(outer)
         footer.pack(side="bottom", fill="x")
         self.progress = ttk.Progressbar(footer, mode="indeterminate")
@@ -386,7 +385,7 @@ class ChessApp:
         )
 
     def _clear_chart(self):
-        # Clearing a Figure updates its toolbar, so do this while Tk widgets exist.
+        # Clear the figure before destroying its widgets because Matplotlib updates the toolbar.
         if self.chart_figure:
             self.chart_figure.clear()
             self.chart_figure = None

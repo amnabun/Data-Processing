@@ -1,4 +1,4 @@
-"""Argument validation and small adapters around the shared application functions."""
+"""Validate command-line options and run the requested task."""
 
 import argparse
 import sqlite3

@@ -1,8 +1,7 @@
-"""Stream PGN headers into an atomic, disk-backed dataset.
+"""Stream PGN headers into a SQLite database.
 
-PGN skimming follows python-chess's HeadersBuilder API:
+We use python-chess's HeadersBuilder to read game metadata and skip the moves.
 https://python-chess.readthedocs.io/en/latest/pgn.html#skimming
-Moves are deliberately not parsed or stored; this application analyses metadata.
 """
 
 import os
@@ -17,7 +16,7 @@ import chess.pgn
 
 try:
     from compression import zstd
-except ImportError:  # Python 3.10-3.13 use the same API via the maintained backport.
+except ImportError:  # The backport provides the same API on Python 3.10-3.13.
     from backports import zstd
 
 from .models import DataError, Game
@@ -42,7 +41,7 @@ class ImportSummary:
 
 
 class UniqueHeaders(chess.pgn.HeadersBuilder):
-    """Remember a duplicate while the parser finishes consuming the game."""
+    """Record the first duplicate tag so the importer can skip that game and continue."""
 
     def __init__(self):
         super().__init__()
@@ -63,11 +62,11 @@ def preprocess(
     overwrite: bool = False,
     progress: Callable[[int], None] | None = None,
 ) -> ImportSummary:
-    """Import valid games, report skipped records, and publish only a complete file.
+    """Save valid games to SQLite and return the import counts.
 
-    Missing metadata is never invented. Recoverable record errors are counted;
-    unreadable, corrupt or truncated streams abort without replacing the output.
-    Equal timestamps retain source order through the generated game IDs.
+    Count and skip games with missing or invalid metadata. If the input is unreadable,
+    corrupt or truncated, leave any existing output in place. Game IDs preserve file
+    order when timestamps match.
     """
     source = Path(source).expanduser().resolve()
     destination = Path(destination).expanduser().resolve()
@@ -90,7 +89,7 @@ def preprocess(
         connection.executescript(SCHEMA)
         connection.execute(f"PRAGMA application_id = {APPLICATION_ID}")
         connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
-        # Detect compressed input by its magic bytes, not only the filename.
+        # Check the file signature too, in case a compressed file lacks the .zst suffix.
         with source.open("rb") as probe:
             magic = probe.read(4)
         compressed = magic == b"\x28\xb5\x2f\xfd" or source.suffix.lower() == ".zst"
@@ -136,12 +135,12 @@ def preprocess(
         if overwrite:
             os.replace(temporary, destination)
         elif os.name == "nt":
-            # Windows rename refuses an existing destination and works on volumes
-            # where hard links are unavailable (including some synced folders).
+            # On Windows, rename fails if the destination exists. It also works in
+            # some synced folders where hard links are unavailable.
             os.rename(temporary, destination)
         else:
-            # Hard-link publication is atomic and fails if another process created
-            # the destination during import. Both paths are on the same filesystem.
+            # Create the hard link in one atomic step. This fails if another process
+            # already created the destination. Both paths are on the same filesystem.
             os.link(temporary, destination)
             temporary.unlink()
         return summary

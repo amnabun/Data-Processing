@@ -1,4 +1,4 @@
-"""Opening frequencies and chronological rating improvement."""
+"""Opening popularity and player rating changes over time."""
 
 from math import inf
 
@@ -14,8 +14,8 @@ def popular_openings(
 ) -> tuple[int, list[OpeningPopularity]]:
     """Return the matching game count and openings used in at least 1% of them.
 
-    Both rating bounds are inclusive. Percentages use every matching game as
-    their denominator, including openings that fall below the display threshold.
+    Both rating bounds are inclusive. Count every matching game in the percentage
+    calculation, even if its opening falls below the 1% threshold.
     """
     clauses, values = [], []
     if time_control is not None:
@@ -31,7 +31,7 @@ def popular_openings(
         if bound is None:
             continue
         clauses.append(f"game_rating {operator} ?")
-        # A bound outside SQLite's integer range is beyond any imported rating.
+        # SQLite binds integers as signed 64-bit values. Use infinity for bounds beyond that range.
         if bound < -(2**63):
             bound = -inf
         elif bound >= 2**63:
@@ -55,10 +55,11 @@ def popular_openings(
 
 
 def most_improved(store: DataStore, time_control: str) -> list[PlayerImprovement]:
-    """First pre-game to last post-game rating, restricted to one time control.
+    """Rank players by rating gain within one time control.
 
-    Source order resolves equal timestamps. Rating changes are not summed:
-    games missing from the sample may have changed a player's rating too.
+    Subtract the first game's pre-game rating from the last game's post-game rating.
+    This captures changes from games missing from the sample. Use the original file
+    order when timestamps match.
     """
     TimeControl(time_control)
     query = f"""

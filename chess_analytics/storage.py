@@ -1,4 +1,4 @@
-"""Versioned SQLite storage. Connections belong to the thread that opens them."""
+"""Versioned SQLite storage. Use each connection in the thread that opened it."""
 
 import sqlite3
 from pathlib import Path
@@ -51,7 +51,7 @@ FROM games
 
 
 class DataStore:
-    """Read-only access to a processed dataset; use as a context manager."""
+    """Open a processed dataset read-only. Use a with block to close the connection."""
 
     def __init__(self, path: str | Path):
         self.path = Path(path).expanduser().resolve()
@@ -96,7 +96,7 @@ class DataStore:
     def search_players(
         self, query: str = "", limit: int = 200, *, black_only: bool = False
     ) -> list[str]:
-        # LIKE wildcards are escaped: a typed '%' searches for a literal percent sign.
+        # Escape SQL wildcards so a search for '%' matches a literal percent sign.
         pattern = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
         black_query = "SELECT black AS player FROM games WHERE black LIKE ? ESCAPE '\\'"
         if black_only:
